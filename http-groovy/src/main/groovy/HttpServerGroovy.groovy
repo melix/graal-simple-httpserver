@@ -6,12 +6,9 @@ import groovy.transform.CompileStatic
 @CompileStatic
 abstract class HttpServerGroovy {
 
-    // VERY dirty trick to avoid the creation of a groovy.lang.Reference
-    static File baseDir
-
     static void main(String[] args) {
         def port = args.length > 0 ? args[0].toInteger() : 8080
-        baseDir = args.length > 1 ? new File(args[1]).canonicalFile : new File(".").canonicalFile
+        def baseDir = args.length > 1 ? new File(args[1]).canonicalFile : new File(".").canonicalFile
 
         def server = HttpServer.create(new InetSocketAddress(port), 0)
         server.createContext("/", new HttpHandler() {
@@ -23,8 +20,10 @@ abstract class HttpServerGroovy {
                     sendResponse(exchange, 403, "403 (Forbidden)\n")
                 } else if (file.directory) {
                     String base = file == baseDir ? '': uri.path
-                    String listing = linkify(base, file.list()).join("\n")
-                    sendResponse(exchange, 200, String.format("<html><body>%s</body></html>", listing))
+                    String listing = file.list()
+                            .collect { "<li><a href=\"${base}/${it}\">${it}</a></li>" }
+                            .join("\n")
+                    sendResponse(exchange, 200, "<html><body><ul>${listing}</ul></body></html>")
 
                 } else if (!file.file) {
                     sendResponse(exchange, 404, "404 (Not Found)\n")
@@ -34,33 +33,24 @@ abstract class HttpServerGroovy {
             }
         })
         server.executor = null
-        System.out.println(String.format("Listening at http://localhost:%s/", port))
+        println "Listening at http://localhost:${port}/"
         server.start()
     }
 
-    private static List<String> linkify(String base, String[] files) {
-        def out = new ArrayList<String>(files.length)
-        for (int i = 0; i < files.length; i++) {
-            String file = files[i]
-            out << String.format("<ul><a href=\"%s/%s\">%s</a></ul>", base, file, file)
-        }
-        out
-    }
-
-    private static void sendResponse(HttpExchange ex, int code, InputStream ins) {
+    static void sendResponse(HttpExchange ex, int code, InputStream ins) {
         ex.sendResponseHeaders(code, 0)
         ex.responseBody << ins
         ex.responseBody.flush()
         ex.responseBody.close()
     }
 
-    private static void sendResponse(HttpExchange ex, int code, byte[] answer) {
+    static void sendResponse(HttpExchange ex, int code, byte[] answer) {
         ex.sendResponseHeaders(code, answer.length)
         ex.responseBody.write(answer)
         ex.responseBody.close()
     }
 
-    private static void sendResponse(HttpExchange ex, int code, String answer) {
+    static void sendResponse(HttpExchange ex, int code, String answer) {
         sendResponse(ex, code, answer.bytes)
     }
 
